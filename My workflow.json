@@ -1,0 +1,240 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b3d9b694-d498-4ad4-8df0-d77e274c7869",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "C:\\Users\\pandi\\.n8n-files\\gender_ Analysis Dataset.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d17f4111-cf4f-4185-9a6e-8933039f0700",
+      "name": "Read/Write Files from Disk",
+      "alwaysOutputData": true,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "2640dff7-1c62-46af-969c-6e0ba9a8067e",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ================== 1. INPUT DATA ==================\nconst data = items.map(item => item.json);\n\n// ================== 2. DATA CLEANING ==================\nconst cleaned = data.map(row => {\n    let obj = {};\n    for (let key in row) {\n        let val = row[key];\n\n        // Handle missing values\n        if (val === null || val === undefined || val === \"\") {\n            val = 0;\n        }\n\n        // Convert to number if possible\n        if (!isNaN(val)) {\n            val = Number(val);\n        }\n\n        obj[key.trim()] = val;\n    }\n    return obj;\n});\n\n// ================== 3. METRICS ==================\nconst keys = Object.keys(cleaned[0] || {});\nconst numKeys = keys.filter(k => typeof cleaned[0][k] === \"number\");\n\nlet metrics = {};\n\nnumKeys.forEach(k => {\n    let vals = cleaned.map(r => r[k]);\n    let sum = vals.reduce((a, b) => a + b, 0);\n\n    metrics[k] = {\n        sum: sum,\n        avg: sum / vals.length,\n        max: Math.max(...vals),\n        min: Math.min(...vals)\n    };\n});\n\n// ================== 4. CHART DATA ==================\nconst labels = cleaned.map((_, i) => `Row ${i + 1}`);\nconst values = cleaned.map(r => r[numKeys[0]] || 0);\n\n// ================== 5. QUICKCHART URL ==================\nconst chartConfig = {\n    type: \"bar\",\n    data: {\n        labels: labels.slice(0, 10),\n        datasets: [{\n            label: numKeys[0],\n            data: values.slice(0, 10)\n        }]\n    }\n};\n\nconst chartUrl = \"https://quickchart.io/chart?c=\" + encodeURIComponent(JSON.stringify(chartConfig));\n\n// ================== 6. INTRO TEXT ==================\nlet introText = `\n<p>Dear Consumer,</p>\n\n<p>\nWe have analyzed the provided dataset, performed data cleaning and preprocessing,\nand generated meaningful visualizations based on the analysis requirements.\nThe insights derived from the data are presented below for your review.\n</p>\n`;\n\n// ================== 7. REPORT HTML ==================\nlet reportHtml = introText + `\n<h2>📊 Summary Metrics</h2>\n\n<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">\n<tr>\n    <th>Column</th>\n    <th>Sum</th>\n    <th>Average</th>\n    <th>Max</th>\n    <th>Min</th>\n</tr>\n`;\n\nfor (let k in metrics) {\n    reportHtml += `\n    <tr>\n        <td>${k}</td>\n        <td>${metrics[k].sum}</td>\n        <td>${metrics[k].avg.toFixed(2)}</td>\n        <td>${metrics[k].max}</td>\n        <td>${metrics[k].min}</td>\n    </tr>`;\n}\n\nreportHtml += `\n</table>\n\n<h2>📈 Data Visualization</h2>\n<p>Below is the graphical representation of the dataset:</p>\n\n<img src=\"${chartUrl}\" />\n\n<br><br>\n\n<p>Best regards,<br>\nData Analytics System</p>\n`;\n\n// ================== 8. EMAIL HTML ==================\nconst emailHtml = `\n<p>Dear Consumer,</p>\n\n<p>Your data report has been generated successfully.</p>\n\n<img src=\"${chartUrl}\" />\n\n<p>Detailed report is provided below:</p>\n\n${reportHtml}\n\n<p>Regards,<br>\nAutomation System</p>\n`;\n\n// ================== 9. RETURN ==================\nreturn [\n    {\n        json: {\n            cleanedData: cleaned,\n            metrics: metrics,\n            chartUrl: chartUrl,\n            reportHtml: reportHtml,\n            emailHtml: emailHtml\n        }\n    }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "18f7efe0-f791-41aa-bc3e-2430a2eb3ac1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.chartUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "charts"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        832,
+        0
+      ],
+      "id": "a72830ca-1ccf-4dcf-bcc2-86e6c104e895",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "reportHtml",
+        "binaryPropertyName": "report",
+        "options": {
+          "fileName": "report.html"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        -176
+      ],
+      "id": "e6a0e45a-b779-4f07-8641-4daec3e0a309",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1296,
+        -16
+      ],
+      "id": "7e4efd90-6519-4a3f-a38b-76a3db31ced0",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "sendTo": "gokulapandian005@gmail.com",
+        "subject": "=AI ANALYST REPORT-{{ $now }}",
+        "message": "={{ $json.reportHtml }}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "report"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1504,
+        -16
+      ],
+      "id": "f0a6fa2a-423e-4550-862b-ef619f080b9b",
+      "name": "Send a message",
+      "webhookId": "6fb90fc6-8585-4136-bac5-6025702fb32c",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "T6CRkSnBbI71tjrb",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3c4f54c8-0403-457e-bb95-0b69fc2b7c82",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a356ff01de2acb2d1dee9fdf4030755b1530197872723ffb398290f9ea825180"
+  },
+  "id": "GVmuxM4nooHH9UkF",
+  "tags": []
+}
